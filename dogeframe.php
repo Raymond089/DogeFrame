@@ -40,25 +40,66 @@
 		public function getBalance($uID)
 		{
 			$uID = (int)$uID;
+			$spend = 0;
+			$received = 0;
+			$withdraw = 0;
+			$deposit = 0;
+			$address = NULL;
+
 			//fetch data from database
-			$dogeUserData = mysqli_fetch_assoc(mysqli_query($this->connection, "SELECT `doge_spend`, `doge_received`, `doge_withdraw`, `doge_available`, `doge_deposit`, `doge_address` FROM `".$this->settings['db_userTable']."` WHERE `".$this->settings['db_userIdColumn']."`='".$uID."'"));
-			
+			if ($stmt = $this->connection->prepare('SELECT `doge_spend`, `doge_received`, `doge_withdraw`, `doge_deposit`, `doge_address` '
+				. 'FROM `'.$this->settings['db_userTable'].'` '
+				. 'WHERE `'.$this->settings['db_userIdColumn'].'`=?')) {
+				$stmt->bind_param("i", $uID);
+				$stmt->bind_result($spend, $received, $withdraw, $deposit, $address);
+				if (!$stmt->execute()) {
+					throw new Exception($this->connection->error);
+				}
+				if ($stmt->fetch()) {
+					$address = NULL;
+				}
+				$stmt->close();
+			} else {
+				throw new Exception($this->connection->error);
+			}
+
+			if (!$address) {
+				// No user record
+				return 0;
+			}
+
 			//check total received
-			$received = $this->dogecoin->getreceivedbyaddress($dogeUserData['doge_address'], $this->settings['minconf']);
+			$received = $this->dogecoin->getreceivedbyaddress($address, $this->settings['minconf']);
 			
 			//check if there was a new deposit			
-			if ($received != $dogeUserData['doge_deposit'])
+			if ($received != $deposit)
 			{
 				//new deposit posted, add transaction
-				$depositAmount = $received - $dogeUserData['doge_deposit'];				
-				mysqli_query($this->connection, "INSERT INTO `doge_transactions` (`send_user`, `receive_user`, `amount`, `time`, `status`) VALUES ('0', '$uID', '$depositAmount', '".time()."', 'D')");							
+				$depositAmount = $received - $deposit;
+				if ($stmt = $this->connection->prepare("INSERT INTO `doge_transactions` (`send_user`, `receive_user`, `amount`, `time`, `status`) VALUES ('0', ?, ?, CURRENT_TIME(), 'D')")) {
+					$stmt->bind_param("id", $uID, $depositAmount);
+					if (!$stmt->execute()) {
+						throw new Exception($this->connection->error);
+					}
+					$stmt->close();
+				} else {
+					throw new Exception($this->connection->error);
+				}
 			}			
 			
 			//calculate balance
-			$balance = (($received + $dogeUserData['doge_received']) - ($dogeUserData['doge_spend'] + $dogeUserData['doge_withdraw']));
+			$balance = (($received + $received) - ($spend + $withdraw));
 			
 			//write new totals
-			mysqli_query($this->connection, "UPDATE `".$this->settings['db_userTable']."` SET `doge_deposit`='$received', `doge_available`='$balance' WHERE `".$this->settings['db_userIdColumn']."`='$uID'");	
+			if ($stmt = $this->connection->prepare("UPDATE `".$this->settings['db_userTable']."` SET `doge_deposit`=?, `doge_available`=? WHERE `".$this->settings['db_userIdColumn']."`=?")) {
+				$stmt->bind_param("ddi", $received, $balance, $uID);
+				if (!$stmt->execute()) {
+					throw new Exception($this->connection->error);
+				}
+				$stmt->close();
+			} else {
+				throw new Exception($this->connection->error);
+			}
 			
 			//return balance
 			return $balance;
@@ -135,10 +176,25 @@
 		
 		public function depositAddress($uID)
 		{
+			$dogeAddress = NULL;
 			$uID	= (int)$uID;
 			//this function simply retrieves the deposit address of a user identified by $uID 
-			$dogeAddressData = mysqli_fetch_assoc(mysqli_query($this->connection, "SELECT `doge_address` FROM `".$this->settings['db_userTable']."` WHERE `".$this->settings['db_userIdColumn']."`='".$uID."'"));
-			return $dogeAddressData['doge_address'];
+			if ($stmt = $this->connection->prepare('SELECT `doge_address` '
+				. 'FROM `'.$this->settings['db_userTable'].'` '
+				. 'WHERE `'.$this->settings['db_userIdColumn'].'`=?')) {
+				$stmt->bind_param("i", $uID);
+				$stmt->bind_result($dogeAddress);
+				if (!$stmt->execute()) {
+					throw new Exception($this->connection->error);
+				}
+				if (!$stmt->fetch()) {
+					$dogeAddress = NULL;
+				}
+				$stmt->close();
+			} else {
+				throw new Exception($this->connection->error);
+			}
+			return $dogeAddress;
 		}
 	}	
 ?>
