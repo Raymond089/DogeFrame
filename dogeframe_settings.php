@@ -4,9 +4,9 @@
 		//wallet connection data (RPC)
 		"rpc_ip" 			=> "localhost",		
 		"rpc_port"			=> 22555,
-		"rpc_user" 			=> "user",
+		"rpc_user" 			=> "dogecoinrpc",
 		"rpc_password" 		=> "password",
-		"rpc_protocol"		=> "https"			//if, for some reason, you can't use https to connect to the wallet, enter "http" here
+		"rpc_protocol"		=> "https",			//if, for some reason, you can't use https to connect to the wallet, enter "http" here
 		
 		//database information
 		"db_server" 		=> "localhost",
