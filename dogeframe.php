@@ -89,7 +89,7 @@
 			}			
 			
 			//calculate balance
-			$balance = (($received + $received) - ($spend + $withdraw));
+			$balance = (($walletDeposit + $received) - ($spend + $withdraw));
 			
 			//write new totals
 			if ($stmt = $this->connection->prepare("UPDATE `".$this->settings['db_userTable']."` SET `doge_deposit`=?, `doge_available`=? WHERE `".$this->settings['db_userIdColumn']."`=?")) {
