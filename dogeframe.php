@@ -40,10 +40,11 @@
 		public function getBalance($uID)
 		{
 			$uID = (int)$uID;
-			$spend = 0;
-			$received = 0;
-			$withdraw = 0;
-			$deposit = 0;
+			$spend = 0;		//the amount of Doge a user has send in transfers (user-to-user)
+			$received = 0;		//the amount of Doge a user has received from transfers (user-to-user)
+			$withdraw = 0;		//the amount of Doge a user has withdrawn into his local wallet
+			$deposit = 0;		//the amount of Doge a user has deposited into his account up until his last vist, saved in the database
+			$walletDeposit = 0;	//the amount of Doge a user has deposited into his account, according to the wallet (used to update the database deposit)
 			$address = NULL;
 
 			//fetch data from database
@@ -55,7 +56,7 @@
 				if (!$stmt->execute()) {
 					throw new Exception($this->connection->error);
 				}
-				if ($stmt->fetch()) {
+				if (!$stmt->fetch()) {
 					$address = NULL;
 				}
 				$stmt->close();
@@ -69,13 +70,13 @@
 			}
 
 			//check total received
-			$received = $this->dogecoin->getreceivedbyaddress($address, $this->settings['minconf']);
+			$walletDeposit = $this->dogecoin->getreceivedbyaddress($address, $this->settings['minconf']);
 			
 			//check if there was a new deposit			
-			if ($received != $deposit)
+			if ($walletDeposit != $deposit)
 			{
 				//new deposit posted, add transaction
-				$depositAmount = $received - $deposit;
+				$depositAmount = $walletDeposit - $deposit;
 				if ($stmt = $this->connection->prepare("INSERT INTO `doge_transactions` (`send_user`, `receive_user`, `amount`, `time`, `status`) VALUES ('0', ?, ?, CURRENT_TIME(), 'D')")) {
 					$stmt->bind_param("id", $uID, $depositAmount);
 					if (!$stmt->execute()) {
@@ -92,7 +93,7 @@
 			
 			//write new totals
 			if ($stmt = $this->connection->prepare("UPDATE `".$this->settings['db_userTable']."` SET `doge_deposit`=?, `doge_available`=? WHERE `".$this->settings['db_userIdColumn']."`=?")) {
-				$stmt->bind_param("ddi", $received, $balance, $uID);
+				$stmt->bind_param("ddi", $walletDeposit, $balance, $uID);
 				if (!$stmt->execute()) {
 					throw new Exception($this->connection->error);
 				}
