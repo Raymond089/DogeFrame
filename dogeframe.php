@@ -37,6 +37,19 @@
 			return $this->dogecoin->response['result'];
 		}
 		
+		public function checkAddress($address)
+		{
+			//this function checks whether an address is valid or not. Returns 1 if valid, 0 if not. NOTE: relies on the wallet to be online to do the check.
+			$address = strip_tags($address);
+			
+			$this->dogecoin->validateaddress($address);
+			
+			if ($this->dogecoin->response['result']['isvalid'] == 1){
+				return 1;}
+			else{
+				return 0;}			
+		}
+		
 		public function getBalance($uID)
 		{
 			$uID = (int)$uID;
@@ -242,7 +255,7 @@
 				if ($doge_available >= $amount)
 				{
 					//check the address validity
-					if ((strlen($address) == 34) && (substr($address, 0,1)=='D'))
+					if ($this->checkAddress($address))
 					{
 						//do the actual withdrawal, the -1 represents the network-TX fee
 						$this->dogecoin->sendtoaddress($address, $amount-1);
@@ -313,6 +326,7 @@
 				throw new Exception($this->connection->error);
 			}
 			return $dogeAddress;
-		}
+		}		
+
 	}	
 ?>
