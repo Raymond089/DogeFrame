@@ -211,10 +211,35 @@
 			$uID		= (int)$uID;
 			$address	= mysqli_real_escape_string($this->connection, strip_tags($address));
 			$amount		= abs((float)$amount);
+			
+			$doge_available	= 0;		//The amount of Doge available to this user
+			$doge_withdraw	= 0;		//The amount of Doge this user has withdrawn
+			
 			if ((isset($uID))&&(isset($address))&&(isset($amount)))
 			{
-				$dogeSenderData = mysqli_fetch_assoc(mysqli_query($this->connection, "SELECT `doge_spend`, `doge_available`, `doge_withdraw`  FROM `".$this->settings['db_userTable']."` WHERE `".$this->settings['db_userIdColumn']."`='".$uID."'"));
-				if ($dogeSenderData['doge_available'] >= $amount)
+				//fetch data to see if there is enough Doge available for withdrawal
+				if ($stmt = $this->connection->prepare('SELECT `doge_available`, `doge_withdraw`'
+				. 'FROM `' . $this->settings['db_userTable'] . '`'
+				. 'WHERE `' . $this->settings['db_userIdColumn']. '`=?'
+				)){
+					$stmt->bind_param("i", $uID);
+					$stmt->bind_result($doge_available, $doge_withdraw);
+					if (!$stmt->execute()) {
+						throw new Exception($this->connection->error);
+					}
+					if (!$stmt->fetch()) {
+						$doge_available 	= 0;
+						$doge_withdraw		= 0;
+					}
+					$stmt->close();
+				}
+				else
+				{
+					throw new Exception($this->connection->error);
+				}
+				
+				
+				if ($doge_available >= $amount)
 				{
 					//check the address validity
 					if ((strlen($address) == 34) && (substr($address, 0,1)=='D'))
@@ -222,11 +247,29 @@
 						//do the actual withdrawal, the -1 represents the network-TX fee
 						$this->dogecoin->sendtoaddress($address, $amount-1);
 						
-						//update senders withdraw and balance field
-						mysqli_query($this->connection, "UPDATE `".$this->settings['db_userTable']."` SET `doge_withdraw`='".($dogeSenderData['doge_withdraw'] + $amount)."', `doge_available`='".($dogeSenderData['doge_available'] - $amount)."' WHERE `".$this->settings['db_userIdColumn']."`='$uID'");
+						//update senders withdraw and balance field						
+						if ($stmt = $this->connection->prepare("UPDATE `".$this->settings['db_userTable']."` SET `doge_withdraw`=?, `doge_available`=? WHERE `".$this->settings['db_userIdColumn']."`=?")) {
+							$newWithdraw = ($doge_withdraw + $amount);
+							$newAvailable = ($doge_available - $amount);
+						$stmt->bind_param("ddi", $newWithdraw, $newAvailable, $uID);
+						if (!$stmt->execute()) {
+							throw new Exception($this->connection->error);
+						}
+						$stmt->close();
+						} else {
+							throw new Exception($this->connection->error);
+						}
 										
 						//add transaction into table
-						mysqli_query($this->connection, "INSERT INTO `doge_transactions` (`send_user`, `amount`, `time`, `txID`, `status`) VALUES ('$uID', '$amount', '".time()."', '".$this->dogecoin->response["result"]."', 'W')");	
+						if ($stmt = $this->connection->prepare("INSERT INTO `doge_transactions` (`send_user`, `amount`, `time`, `txID`, `status`) VALUES (?, ?, CURRENT_TIME(), ?, 'W')")) {
+							$stmt->bind_param("ids", $uID, $amount, $this->dogecoin->response["result"]);
+							if (!$stmt->execute()) {
+								throw new Exception($this->connection->error);
+							}
+							$stmt->close();
+						} else {
+							throw new Exception($this->connection->error);
+						}
 						
 						//return txID of tx to confirm succes
 						return $this->dogecoin->response["result"];
