@@ -108,22 +108,96 @@
 			
 		public function makeTransaction($sendUser, $receiveUser, $amount)
 		{
-			$sendUser 		= (int)$sendUser;
-			$receiveUser 	= (int)$receiveUser;
-			$amount			= abs((float)$amount);
-			$dogeSenderData = mysqli_fetch_assoc(mysqli_query($this->connection, "SELECT `doge_spend`, `doge_available` FROM `".$this->settings['db_userTable']."` WHERE `".$this->settings['db_userIdColumn']."`='$sendUser'"));
-			if ($dogeSenderData['doge_available'] >= $amount)
+			$sendUser 				= (int)$sendUser;
+			$receiveUser 			= (int)$receiveUser;
+			$amount					= abs((float)$amount);
+			$doge_spend				= 0;					//amount of Doge the sender has spend
+			$doge_available_sender 	= 0;					//amount of Doge the sender has available
+			$doge_received			= 0;					//amount of Doge the receiver has received
+			$doge_available_receiver= 0;					//amount of Doge the receiver has available
+			
+			if ($stmt = $this->connection->prepare('SELECT `doge_spend`, `doge_available`'
+				. 'FROM `' . $this->settings['db_userTable'] . '`'
+				. 'WHERE `' . $this->settings['db_userIdColumn']. '`=?'
+			)){
+				$stmt->bind_param("i", $sendUser);
+				$stmt->bind_result($doge_spend, $doge_available_sender);
+				if (!$stmt->execute()) {
+					throw new Exception($this->connection->error);
+				}
+				if (!$stmt->fetch()) {
+					$doge_spend 			= 0;
+					$doge_available_sender 	= 0;
+				}
+				$stmt->close();
+			}
+			else
+			{
+				throw new Exception($this->connection->error);
+			}
+			
+			if ($doge_available_sender >= $amount)
 			{
 				//update senders spend and balance field
-				mysqli_query($this->connection, "UPDATE `".$this->settings['db_userTable']."` SET `doge_spend`='".($dogeSenderData['doge_spend'] + (float)$amount)."', `doge_available`='".($dogeSenderData['doge_available'] - $amount)."' WHERE `".$this->settings['db_userIdColumn']."`='$sendUser'");
+				if ($stmt = $this->connection->prepare("UPDATE `".$this->settings['db_userTable']."` SET `doge_spend`=?, `doge_available`=? WHERE `".$this->settings['db_userIdColumn']."`=?")) {
+					$newSpend = ($doge_spend + $amount);
+					$newAvailableSender = ($doge_available_sender - $amount);
+				$stmt->bind_param("ddi", $newSpend, $newAvailableSender, $sendUser);
+				if (!$stmt->execute()) {
+					throw new Exception($this->connection->error);
+				}
+				$stmt->close();
+				} else {
+					throw new Exception($this->connection->error);
+				}
+				
 				//update receivers received and balance field
-				$dogeReceiverData = mysqli_fetch_assoc(mysqli_query($this->connection, "SELECT `doge_spend`, `doge_available` FROM `".$this->settings['db_userTable']."` WHERE `".$this->settings['db_userIdColumn']."`='".$receiveUser."'"));
-				mysqli_query($this->connection, "UPDATE `".$this->settings['db_userTable']."` SET `doge_received`='".($dogeReceiverData['doge_spend'] + $amount)."', `doge_available`='".($dogeReceiverData['doge_available'] + $amount)."' WHERE `".$this->settings['db_userIdColumn']."`='$receiveUser'");
+				if ($stmt = $this->connection->prepare('SELECT `doge_received`, `doge_available`'
+				. 'FROM `' . $this->settings['db_userTable'] . '`'
+				. 'WHERE `' . $this->settings['db_userIdColumn']. '`=?'
+				)){
+					$stmt->bind_param("i", $receiveUser);
+					$stmt->bind_result($doge_received, $doge_available_receiver);
+					if (!$stmt->execute()) {
+						throw new Exception($this->connection->error);
+					}
+					if (!$stmt->fetch()) {
+						$doge_received 			= 0;
+						$doge_available_receiver= 0;
+					}
+					$stmt->close();
+				}
+				else
+				{
+					throw new Exception($this->connection->error);
+				}
+				
+				if ($stmt = $this->connection->prepare("UPDATE `".$this->settings['db_userTable']."` SET `doge_received`=?, `doge_available`=? WHERE `".$this->settings['db_userIdColumn']."`=?")) {
+					$newReceived = ($doge_received + $amount);
+					$newAvailableReceiver = ($doge_available_receiver + $amount);
+				$stmt->bind_param("ddi", $newReceived, $newAvailableReceiver, $receiveUser);
+				if (!$stmt->execute()) {
+					throw new Exception($this->connection->error);
+				}
+				$stmt->close();
+				} else {
+					throw new Exception($this->connection->error);
+				}
+				
 				//add transaction into table
-				mysqli_query($this->connection, "INSERT INTO `doge_transactions` (`send_user`, `receive_user`, `amount`, `time`, `status`) VALUES ('$sendUser', '$receiveUser', '$amount', '".time()."', 'T')");
+				if ($stmt = $this->connection->prepare("INSERT INTO `doge_transactions` (`send_user`, `receive_user`, `amount`, `time`, `status`) VALUES (?, ?, ?, CURRENT_TIME(), 'T')")) {
+					$stmt->bind_param("iid", $sendUser, $receiveUser, $amount);
+					if (!$stmt->execute()) {
+						throw new Exception($this->connection->error);
+					}
+					$stmt->close();
+				} else {
+					throw new Exception($this->connection->error);
+				}
+				
 				
 				//return new balance of sender to confirm succes
-				return ($dogeSenderData['doge_available'] - $amount);
+				return ($doge_available_sender - $amount);
 			}
 			else
 			{
