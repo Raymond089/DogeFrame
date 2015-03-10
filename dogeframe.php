@@ -257,35 +257,44 @@
 					//check the address validity
 					if ($this->checkAddress($address))
 					{
-						//do the actual withdrawal, the -1 represents the network-TX fee
-						$this->dogecoin->sendtoaddress($address, $amount-1);
-						
-						//update senders withdraw and balance field						
-						if ($stmt = $this->connection->prepare("UPDATE `".$this->settings['db_userTable']."` SET `doge_withdraw`=?, `doge_available`=? WHERE `".$this->settings['db_userIdColumn']."`=?")) {
-							$newWithdraw = ($doge_withdraw + $amount);
-							$newAvailable = ($doge_available - $amount);
-						$stmt->bind_param("ddi", $newWithdraw, $newAvailable, $uID);
-						if (!$stmt->execute()) {
-							throw new Exception($this->connection->error);
-						}
-						$stmt->close();
-						} else {
-							throw new Exception($this->connection->error);
-						}
-										
-						//add transaction into table
-						if ($stmt = $this->connection->prepare("INSERT INTO `doge_transactions` (`send_user`, `amount`, `time`, `txID`, `status`) VALUES (?, ?, CURRENT_TIME(), ?, 'W')")) {
-							$stmt->bind_param("ids", $uID, $amount, $this->dogecoin->response["result"]);
+						//see if the wallet holds enough funds for the withdrawal (could be low on funds due to cold-storage of funds)
+						if ($amount < $this->dogecoin->getBalance())
+						{
+							//do the actual withdrawal, the -1 represents the network-TX fee
+							$this->dogecoin->sendtoaddress($address, $amount-1);
+							
+							//update senders withdraw and balance field						
+							if ($stmt = $this->connection->prepare("UPDATE `".$this->settings['db_userTable']."` SET `doge_withdraw`=?, `doge_available`=? WHERE `".$this->settings['db_userIdColumn']."`=?")) {
+								$newWithdraw = ($doge_withdraw + $amount);
+								$newAvailable = ($doge_available - $amount);
+							$stmt->bind_param("ddi", $newWithdraw, $newAvailable, $uID);
 							if (!$stmt->execute()) {
 								throw new Exception($this->connection->error);
 							}
 							$stmt->close();
-						} else {
-							throw new Exception($this->connection->error);
+							} else {
+								throw new Exception($this->connection->error);
+							}
+											
+							//add transaction into table
+							if ($stmt = $this->connection->prepare("INSERT INTO `doge_transactions` (`send_user`, `amount`, `time`, `txID`, `status`) VALUES (?, ?, CURRENT_TIME(), ?, 'W')")) {
+								$stmt->bind_param("ids", $uID, $amount, $this->dogecoin->response["result"]);
+								if (!$stmt->execute()) {
+									throw new Exception($this->connection->error);
+								}
+								$stmt->close();
+							} else {
+								throw new Exception($this->connection->error);
+							}
+							
+							//return txID of tx to confirm succes
+							return $this->dogecoin->response["result"];
 						}
-						
-						//return txID of tx to confirm succes
-						return $this->dogecoin->response["result"];
+						else
+						{
+							//low on wallet funds
+							return -4;
+						}
 					}
 					else
 					{
