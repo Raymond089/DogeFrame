@@ -6,7 +6,7 @@
 			require "dogecoin.php";
 			require "dogeframe_settings.php";
 			//connect to the database
-			$this->connection = mysqli_connect($this->settings['db_server'] , $this->settings['db_username'], $this->settings['db_password'], $this->settings['db_database']);
+			$this->connection = mysqli_connect($this->settings['db_server'], $this->settings['db_username'], $this->settings['db_password'], $this->settings['db_database'], $this->settings['db_port']);
 			
 			$this->dogecoin = new Dogecoin($this->settings['rpc_user'], $this->settings['rpc_password'], $this->settings['rpc_ip'], $this->settings['rpc_port'], $this->settings['rpc_protocol'] );
 		}
