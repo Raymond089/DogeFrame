@@ -1,3 +1,7 @@
+# DEPRECATED
+
+This repository is no longer maintained.
+
 # DogeFrame
 
 DogeFrame is meant to be an easy to use framework that can be used for easilly integrating Dogecoin deposits, withdrawals and of-chain transactions.
